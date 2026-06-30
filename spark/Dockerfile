@@ -26,9 +26,4 @@ RUN mkdir -p /opt/spark/jars/extras && \
 # Copy Spark configuration
 COPY conf/spark-defaults.conf /opt/spark/conf/spark-defaults.conf
 
-# Set permissions
-RUN chmod -R 755 /opt/spark/jars/extras
-
-USER spark
-
 WORKDIR /opt/spark/work-dir

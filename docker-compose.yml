@@ -483,6 +483,13 @@ services:
       context: ./eventsim
       dockerfile: Dockerfile
     container_name: eventsim
+    command: >
+      -c "examples/example-config.json"
+      --start-time "2024-01-01T00:00:00"
+      --end-time "2030-01-01T00:00:00"
+      --nusers 100
+      --kafkaBrokerList kafka-1:9092
+      --continuous
     networks:
       - kafka-network
     depends_on:
