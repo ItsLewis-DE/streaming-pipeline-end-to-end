@@ -1,0 +1,22 @@
+# =============================================================================
+# Airflow Python Dependencies
+# Pin all versions for reproducibility
+# =============================================================================
+
+# Airflow Providers
+apache-airflow-providers-apache-kafka==1.6.1
+apache-airflow-providers-apache-spark==4.11.1
+apache-airflow-providers-postgres==5.13.0
+apache-airflow-providers-redis==3.8.0
+apache-airflow-providers-http==4.13.2
+
+# Celery (for CeleryExecutor)
+celery[redis]==5.4.0
+flower==2.0.1
+
+# Data processing
+psycopg2-binary==2.9.10
+confluent-kafka==2.6.1
+
+# Utilities
+requests==2.32.3
