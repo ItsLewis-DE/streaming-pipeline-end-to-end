@@ -44,3 +44,12 @@ scrape_configs:
       - targets: ["minio:9000"]
         labels:
           component: "data-lake"
+
+  # ---- Spark Streaming Custom Metrics ----
+  - job_name: "spark-streaming-app"
+    static_configs:
+      # Cố gắng cào dữ liệu từ port 9108 trên cả master và worker 
+      # (tùy thuộc vào việc Spark Driver của bạn đang chạy ở đâu)
+      - targets: ["spark-master:9108", "spark-worker-1:9108"]
+        labels:
+          app: "music-streaming-metrics"
