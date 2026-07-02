@@ -499,7 +499,7 @@ services:
       resources:
         limits:
           memory: 1024M
-          cpus: "0.1"
+          cpus: "0.5"
     restart: unless-stopped
 
   # ===========================================================================
