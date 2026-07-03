@@ -486,8 +486,8 @@ services:
     command: >
       -c "examples/example-config.json"
       --start-time "2024-01-01T00:00:00"
-      --end-time "2030-01-01T00:00:00"
-      --nusers 100
+      --end-time "2024-01-01T23:59:00"
+      --nusers 10
       --kafkaBrokerList kafka-1:9092
       --continuous
     networks:
@@ -499,7 +499,7 @@ services:
       resources:
         limits:
           memory: 1024M
-          cpus: "1.0"
+          cpus: "0.5"
     restart: unless-stopped
 
   # ===========================================================================
