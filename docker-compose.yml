@@ -174,7 +174,9 @@ services:
       SPARK_MASTER_WEBUI_PORT: 8080
     command: >
       bash -c "/opt/spark/sbin/start-master.sh &&
+               /usr/sbin/sshd &&
                mkdir -p /opt/spark/spark-events /opt/spark/checkpoints &&
+               chmod 777 /opt/spark/spark-events /opt/spark/checkpoints &&
                tail -f /opt/spark/logs/*"
     volumes:
       - ./spark/app:/opt/spark/app:ro
@@ -215,6 +217,7 @@ services:
     command: >
       bash -c "/opt/spark/sbin/start-worker.sh spark://spark-master:7077 &&
                mkdir -p /opt/spark/spark-events /opt/spark/checkpoints &&
+               chmod 777 /opt/spark/spark-events /opt/spark/checkpoints &&
                tail -f /opt/spark/logs/*"
     volumes:
       - ./spark/app:/opt/spark/app:ro

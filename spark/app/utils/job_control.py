@@ -4,6 +4,15 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Nếu bạn muốn cấu hình format cho log thì có thể dùng basicConfig (tuỳ chọn)
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    
 CONTROL_TABLE = "metadata.job_control"
 
 def insert_log(spark: SparkSession, bucket_name: str, table_name: str, max_timestamp: str) -> bool:

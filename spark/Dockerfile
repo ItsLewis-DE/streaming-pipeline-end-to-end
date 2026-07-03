@@ -23,6 +23,17 @@ RUN mkdir -p /opt/spark/jars/extras && \
     curl -sLO "https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar" && \
     curl -sLO "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar"
 
+# Install OpenSSH Server
+RUN apt-get update && apt-get install -y openssh-server && \
+    mkdir -p /var/run/sshd
+
+RUN useradd -ms /bin/bash sparkuser && echo "sparkuser:sparkpass" | chpasswd
+
+# Configure SSH for sparkuser
+RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config || true
+
+EXPOSE 22
+
 # Copy Spark configuration
 COPY conf/spark-defaults.conf /opt/spark/conf/spark-defaults.conf
 
