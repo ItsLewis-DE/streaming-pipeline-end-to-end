@@ -9,7 +9,6 @@ os.environ["PYSPARK_PIN_THREAD"] = "true"
 sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.schemas import TOPIC_MAP_SCHEMA
-
 spark = SparkSession.builder \
         .appName("KafkaToBronze") \
         .config("spark.streaming.stopGracefullyOnShutdown", True) \
@@ -53,7 +52,6 @@ for topic_name, topic_schema in TOPIC_MAP_SCHEMA.items():
                         "ingested_at"
         )
     
-    # Sử dụng closure (hàm lồng) để đảm bảo table_name và dlq_name không bị ghi đè trong vòng lặp for
     def get_ingest_func(t_name, d_name):
         def ingest_to_bronze(batch_df, batch_id):
             # Cache (Persist) lại micro-batch để tránh phải đọc/parse lại từ Kafka nhiều lần

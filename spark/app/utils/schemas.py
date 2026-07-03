@@ -41,3 +41,5 @@ TOPIC_MAP_SCHEMA = {
     "page_view_events": page_view_events_schema,
     "auth_events": auth_events_schema
 }
+
+ALL_TOPICS = ["listen_events","page_view_events","auth_events"]
