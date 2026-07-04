@@ -3,3 +3,4 @@ hive/aws-java-sdk-bundle-1.11.271.jar
 hive/hadoop-aws-3.1.0.jar
 hive/postgresql-42.7.4.jar
 eventsim/data/output
+BUG_REPORT.md

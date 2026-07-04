@@ -8,7 +8,6 @@ from pyspark.sql.types import StructType, StructField, StringType, LongType, Tim
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# Nếu bạn muốn cấu hình format cho log thì có thể dùng basicConfig (tuỳ chọn)
 if not logger.handlers:
     handler = logging.StreamHandler()
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')

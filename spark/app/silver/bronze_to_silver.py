@@ -91,7 +91,7 @@ for topic_name in ALL_TOPICS:
             F.count("*").alias("row_count")
         ).collect()[0]
         
-        new_min_ts = stats["min_ts"]
+        new_min_ts = max_timestamp
         new_max_ts = stats["max_ts"]
         row_count = stats["row_count"]
         
@@ -99,7 +99,7 @@ for topic_name in ALL_TOPICS:
             if spark.catalog.tableExists(target_table):
                 df_processed.writeTo(target_table).option("mergeSchema", "true").append()
             else:
-                df_processed.writeTo(target_table).partitionedBy(F.days("ingested_at")).create()            
+                df_processed.writeTo(target_table).partitionedBy(F.days("_updated_at")).create()            
                 
             insert_log(
                 spark=spark, 

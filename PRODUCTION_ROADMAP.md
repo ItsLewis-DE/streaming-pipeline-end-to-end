@@ -1,22 +1,3 @@
-PHASE 3: GOLD LAYER DESIGN & IMPLEMENTATION
-3.1 Gold Tables Schema
-Bảng	Loại	Mô tả
-gold.fact_user_activity_daily	Fact	Aggregated per user per day
-gold.fact_hourly_activity	Fact	Hourly KPIs (active users, events, paid ratio)
-gold.fact_top_content_daily	Fact	Top songs/artists per day ranked
-gold.dim_user	Dim (SCD2)	User dimension with level history
-gold.dim_song	Dim	Song/artist reference
-3.2 Gold Spark Jobs (thư mục spark/app/gold/)
-File	Chức năng
-silver_dq_checks.py	Pre-Gold DQ validation
-build_dimensions.py	Build dim_user (SCD2) + dim_song
-build_fact_user_activity.py	Build fact_user_activity_daily
-build_fact_hourly.py	Build fact_hourly_activity
-build_top_content.py	Build fact_top_content_daily
-gold_dq_checks.py	Post-Gold DQ validation
-3.3 Gold DAG (airflow/dags/silver_to_gold_pipeline.py)
-# schedule @daily, depends_on_past=True, catchup=True
-# Flow: start → silver_dq → build_dimensions → [fact_user, fact_hourly, top_content] → gold_dq → end
 PHASE 4: MONITORING & ALERTING
 4.1 Grafana Dashboards
 - pipeline-health.json: Kafka lag, Spark duration, data freshness per layer
