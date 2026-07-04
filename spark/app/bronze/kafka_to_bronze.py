@@ -64,14 +64,14 @@ for topic_name, topic_schema in TOPIC_MAP_SCHEMA.items():
             # Ghi dữ liệu hợp lệ vào bảng Bronze
             if not valid_df.isEmpty():
                 if spark.catalog.tableExists(t_name):
-                    valid_df.writeTo(t_name).append()
+                    valid_df.writeTo(t_name).option("mergeSchema","true").append() #mergeSchema là để khi có thay đổi schema một cách chủ động trong file schema.py thì nó có thể auto schema evolution
                 else:
                     valid_df.writeTo(t_name).partitionedBy(days("ingested_at")).create()
             
             # Ghi dữ liệu lỗi vào bảng Dead Letter Queue (DLQ)
             if not fail_df.isEmpty():
                 if spark.catalog.tableExists(d_name):
-                    fail_df.writeTo(d_name).append()
+                    fail_df.writeTo(d_name).option("mergeSchema", "true").append()
                 else:
                     fail_df.writeTo(d_name).partitionedBy(days("ingested_at")).create()
                     

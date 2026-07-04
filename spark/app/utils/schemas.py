@@ -27,6 +27,9 @@ listen_events_schema = StructType(base_schema.fields + [
 ])
 
 page_view_events_schema = StructType(base_schema.fields + [
+    StructField("page", StringType(), True),
+    StructField("method", StringType(), True),
+    StructField("status", IntegerType(), True),
     StructField("artist", StringType(), True),
     StructField("song", StringType(), True),
     StructField("duration", DoubleType(), True)
@@ -36,10 +39,13 @@ auth_events_schema = StructType(base_schema.fields + [
     StructField("success", StringType(), True)
 ])
 
+status_change_events_schema = StructType(base_schema.fields)
+
 TOPIC_MAP_SCHEMA = {
     "listen_events": listen_events_schema,
     "page_view_events": page_view_events_schema,
-    "auth_events": auth_events_schema
+    "auth_events": auth_events_schema,
+    "status_change_events": status_change_events_schema
 }
 
-ALL_TOPICS = ["listen_events","page_view_events","auth_events"]
+ALL_TOPICS = ["listen_events", "page_view_events", "auth_events", "status_change_events"]

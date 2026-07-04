@@ -1,7 +1,9 @@
 import logging
 import json
+from datetime import datetime
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col
+from pyspark.sql import functions as F
+from pyspark.sql.types import StructType, StructField, StringType, LongType, TimestampType
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -13,54 +15,89 @@ if not logger.handlers:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     
-CONTROL_TABLE = "metadata.job_control"
+CONTROL_TABLE = "metadata.job_run_history"
 
-def insert_log(spark: SparkSession, bucket_name: str, table_name: str, max_timestamp: str) -> bool:
+def get_job_control_schema():
+    return StructType([
+        StructField("bucket_name", StringType(), True),
+        StructField("table_name", StringType(), True),
+        StructField("min_timestamp", StringType(), True),
+        StructField("max_timestamp", StringType(), True),
+        StructField("row_count", LongType(), True),
+        StructField("status", StringType(), True),
+        StructField("error_message", StringType(), True),
+        StructField("processed_at", TimestampType(), True)
+    ])
+
+def insert_log(spark: SparkSession, 
+               bucket_name: str, 
+               table_name: str, 
+               min_timestamp: str, 
+               max_timestamp: str, 
+               row_count: int, 
+               status: str, 
+               error_message: str = None) -> bool:
     try:
         if not spark.catalog.tableExists(CONTROL_TABLE):
             spark.sql(f"""
-                CREATE TABLE {CONTROL_TABLE} (bucket_name STRING, table_name STRING, max_timestamp STRING)
+                CREATE TABLE {CONTROL_TABLE} (
+                    bucket_name STRING, 
+                    table_name STRING, 
+                    min_timestamp STRING,
+                    max_timestamp STRING,
+                    row_count BIGINT,
+                    status STRING,
+                    error_message STRING,
+                    processed_at TIMESTAMP
+                )
                 USING iceberg
+                PARTITIONED BY (days(processed_at))
             """)
-        _data = [
-            [bucket_name, table_name, max_timestamp]
-        ]
-        _col = ["bucket_name", "table_name", "max_timestamp"]
-        df_source = spark.createDataFrame(_data, _col)
-        df_source.createOrReplaceTempView("_source")
-
-        spark.sql(f"""
-            MERGE INTO {CONTROL_TABLE} t
-            USING _source s 
-            ON t.bucket_name = s.bucket_name and t.table_name = s.table_name 
-            WHEN MATCHED THEN UPDATE SET t.max_timestamp = s.max_timestamp
-            WHEN NOT MATCHED THEN INSERT *
-        """)
         
-        logger.info("Da insert thanh cong!")
+        now = datetime.now()
+        
+        _data = [{
+            "bucket_name": bucket_name,
+            "table_name": table_name,
+            "min_timestamp": min_timestamp,
+            "max_timestamp": max_timestamp,
+            "row_count": row_count,
+            "status": status,
+            "error_message": error_message,
+            "processed_at": now
+        }]
+        
+        df_source = spark.createDataFrame(_data, schema=get_job_control_schema())
+        
+        df_source.writeTo(CONTROL_TABLE).append()
+        
+        logger.info(f"Da insert log {status} thanh cong cho {bucket_name}.{table_name}!")
         return True
     except Exception as e:
-        logger.error(f"Loi khi upsert: {e}")
+        logger.error(f"Loi khi insert log vao job_control: {e}")
         return False
 
 def get_max_timestamp(spark: SparkSession, bucket_name: str, table_name: str) -> str:
     """
-    Lấy max_timestamp cho 1 cặp (bucket_name, table_name) từ bảng control.
+    Lấy max_timestamp của lần chạy SUCCESS gần nhất cho 1 cặp (bucket_name, table_name) từ bảng history.
     Trả về config mặc định nếu không tìm thấy hoặc bảng chưa tồn tại.
     """
     try:
         if spark.catalog.tableExists(CONTROL_TABLE):
             row = (
                 spark.read.table(CONTROL_TABLE)
-                .filter((col("bucket_name") == bucket_name) & (col("table_name") == table_name))
-                .select(col("max_timestamp"))
+                .filter((F.col("bucket_name") == bucket_name) & 
+                        (F.col("table_name") == table_name) & 
+                        (F.col("status") == "SUCCESS"))
+                .orderBy(F.col("processed_at").desc())
+                .select(F.col("max_timestamp"))
                 .first()
             )
 
             if row:
                 return str(row["max_timestamp"])
 
-        logger.warning(f"Không tìm thấy max_timestamp cho {bucket_name}.{table_name}")
+        logger.warning(f"Không tìm thấy max_timestamp SUCCESS cho {bucket_name}.{table_name}")
         logger.info("se doc datetime tu file run_config")
         
         try:

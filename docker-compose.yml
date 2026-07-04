@@ -35,6 +35,13 @@ x-airflow-common: &airflow-common
     AIRFLOW__API__AUTH_BACKENDS: ${AIRFLOW__API__AUTH_BACKENDS}
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: ${AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK}
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: ${AIRFLOW__WEBSERVER__EXPOSE_CONFIG}
+    AIRFLOW__SMTP__SMTP_HOST: ${AIRFLOW__SMTP__SMTP_HOST}
+    AIRFLOW__SMTP__SMTP_STARTTLS: ${AIRFLOW__SMTP__SMTP_STARTTLS:-True}
+    AIRFLOW__SMTP__SMTP_SSL: ${AIRFLOW__SMTP__SMTP_SSL:-False}
+    AIRFLOW__SMTP__SMTP_USER: ${AIRFLOW__SMTP__SMTP_USER}
+    AIRFLOW__SMTP__SMTP_PASSWORD: ${AIRFLOW__SMTP__SMTP_PASSWORD}
+    AIRFLOW__SMTP__SMTP_PORT: ${AIRFLOW__SMTP__SMTP_PORT:-587}
+    AIRFLOW__SMTP__SMTP_MAIL_FROM: ${AIRFLOW__SMTP__SMTP_MAIL_FROM}
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - airflow-logs:/opt/airflow/logs
@@ -107,7 +114,7 @@ services:
     container_name: postgres
     hostname: postgres
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-airflow}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -177,7 +184,11 @@ services:
                /usr/sbin/sshd &&
                mkdir -p /opt/spark/spark-events /opt/spark/checkpoints &&
                chmod 777 /opt/spark/spark-events /opt/spark/checkpoints &&
-               tail -f /opt/spark/logs/*"
+               sleep 15 &&
+               /opt/spark/bin/spark-submit --master spark://spark-master:7077 /opt/spark/app/bronze/kafka_to_bronze.py &
+               /opt/spark/bin/spark-submit --master spark://spark-master:7077 /opt/spark/app/metrics/stream_metrics.py &
+               /opt/spark/bin/spark-submit --master spark://spark-master:7077 /opt/spark/app/init/init_namespace.py &
+               mkdir -p /opt/spark/logs && touch /opt/spark/logs/init.log && tail -f /opt/spark/logs/*"
     volumes:
       - ./spark/app:/opt/spark/app:ro
       - spark-events:/opt/spark/spark-events
@@ -218,7 +229,7 @@ services:
       bash -c "/opt/spark/sbin/start-worker.sh spark://spark-master:7077 &&
                mkdir -p /opt/spark/spark-events /opt/spark/checkpoints &&
                chmod 777 /opt/spark/spark-events /opt/spark/checkpoints &&
-               tail -f /opt/spark/logs/*"
+               mkdir -p /opt/spark/logs && touch /opt/spark/logs/init.log && tail -f /opt/spark/logs/*"
     volumes:
       - ./spark/app:/opt/spark/app:ro
       - spark-events:/opt/spark/spark-events
@@ -435,7 +446,7 @@ services:
     container_name: grafana
     hostname: grafana
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
