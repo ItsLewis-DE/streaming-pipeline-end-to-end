@@ -1,7 +1,3 @@
-
-2.6 PII Masking (GDPR readiness)
-- userId, firstName, lastName, zip, lon/lat → hash hoặc mask ở Silver layer
-- Lưu mapping ở bảng riêng nếu cần reversible
 PHASE 3: GOLD LAYER DESIGN & IMPLEMENTATION
 3.1 Gold Tables Schema
 Bảng	Loại	Mô tả
