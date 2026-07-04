@@ -1,13 +1,29 @@
 # =============================================================================
-# Custom Spark Image with Kafka Connector
+# Custom Spark Image with Kafka Connector and SSH Server for Airflow
 # =============================================================================
 FROM apache/spark:3.5.6-python3
 
 USER root
 
+# Install SSH server and other OS dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssh-server \
+    curl \
+    wget \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Set up SSH for Airflow SSHOperator
+RUN mkdir -p /var/run/sshd \
+ && echo 'root:root' | chpasswd \
+ && sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config \
+ && sed -i 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' /etc/pam.d/sshd
+
+RUN useradd -ms /bin/bash sparkuser && echo "sparkuser:sparkpass" | chpasswd
+
 # Install Python dependencies for PySpark streaming
 RUN pip install --no-cache-dir --quiet \
     py4j \
+    prometheus-client \
     delta-spark==3.2.1
 
 # Download Spark-Kafka connector and dependencies from Maven Central
