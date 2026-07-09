@@ -16,7 +16,7 @@ with DAG(
     dag_id='silver_to_gold_pipeline',
     default_args=default_args,
     description='Pipeline chạy định kỳ (Batch) xử lý dữ liệu từ Silver sang Gold',
-    schedule='@hourly',
+    schedule='*/5 * * * *',
     start_date=datetime(2026, 6, 28),
     catchup=False,
     tags=['gold', 'batch', 'iceberg'],
