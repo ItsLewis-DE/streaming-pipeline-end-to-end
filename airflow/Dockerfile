@@ -1,4 +1,4 @@
-FROM apache/airflow:2.10.5-python3.11
+FROM apache/airflow:3.2.2-python3.12
 
 USER root
 
@@ -9,5 +9,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 USER airflow
 
-# Airflow SSH provider is required for SSHOperator
-RUN pip install --no-cache-dir apache-airflow-providers-ssh==3.*
+# Install requirements (providers + dependencies)
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt

@@ -16,7 +16,7 @@ with DAG(
     dag_id='bronze_to_silver_pipeline',
     default_args=default_args,
     description='Pipeline chạy định kỳ (Batch) làm sạch và khử trùng lặp dữ liệu từ Bronze sang Silver',
-    schedule_interval='@hourly',
+    schedule='@hourly',
     start_date=datetime(2026, 6, 28),
     catchup=False, # Vì Spark script tự quản lý dữ liệu mới bằng bảng metadata.job_control, ta không cần catchup
     tags=['silver', 'batch', 'iceberg'],
@@ -31,5 +31,23 @@ with DAG(
         script_path='/opt/spark/app/silver/bronze_to_silver.py',
         extra_args=[] # Script hiện tại tự tính toán ngày tháng theo job_control nên không cần truyền param --date
     )
+    # -------------------------------------------------------------------------
+    # Task 2: Chạy Spark Job Build Dimensions
+    # -------------------------------------------------------------------------
+    build_dimensions = make_spark_task(
+        task_id='build_dimensions_job',
+        script_path='/opt/spark/app/gold/build_dimensions.py',
+    )
 
-    run_bronze_to_silver
+    # -------------------------------------------------------------------------
+    # Task 3: Check DLQ bucket
+    # -------------------------------------------------------------------------
+    run_dlq_monitoring = make_spark_task(
+        task_id='run_dlq_monitoring_job',
+        script_path='/opt/spark/app/bronze/dlq_monitoring.py',
+        extra_args=[
+            '--threshold', '20.0',
+            '--hours', '1'
+        ]
+    )
+    run_dlq_monitoring >> run_bronze_to_silver >> build_dimensions

@@ -8,6 +8,7 @@ USER root
 # Install Python dependencies for PySpark streaming
 RUN pip install --no-cache-dir --quiet \
     py4j \
+    prometheus_client \
     delta-spark==3.2.1
 
 # Download Spark-Kafka connector and dependencies from Maven Central

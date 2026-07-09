@@ -99,7 +99,7 @@ for topic_name in ALL_TOPICS:
             if spark.catalog.tableExists(target_table):
                 df_processed.writeTo(target_table).option("mergeSchema", "true").append()
             else:
-                df_processed.writeTo(target_table).partitionedBy(F.days("_updated_at")).create()            
+                df_processed.writeTo(target_table).partitionedBy(F.days("_processed_at")).create()            
                 
             insert_log(
                 spark=spark, 

@@ -26,6 +26,7 @@ spark = SparkSession.builder \
 from pyspark.sql.window import Window
 from utils.job_control import get_max_timestamp, insert_log
 
+bucket_name="gold"
 def create_dim_tables(spark: SparkSession):
     #Partition theo is_current để lúc sau dùng where cho nhanh
     spark.sql("""
@@ -39,9 +40,10 @@ def create_dim_tables(spark: SparkSession):
             is_current BOOLEAN
         ) USING iceberg PARTITIONED BY (is_current) 
     """)
+
     spark.sql("""
         CREATE TABLE IF NOT EXISTS lakehouse.gold.dim_song (
-            song_id STRING, song_name STRING, artist_name STRING
+            song_id STRING, song_name STRING, artist_name STRING, song_duration DOUBLE
         ) USING iceberg
     """)
 
@@ -78,8 +80,8 @@ def load_dim_song(spark: SparkSession):
         """)
         
         new_max = df_listen.agg(F.max("_processed_at")).collect()[0][0]
-        insert_log(spark, bucket_name, job_name, min_ts=max_ts, max_ts=new_max, row_count=df_new_songs.count(), status="SUCCESS")
-    except:
+        insert_log(spark, bucket_name, job_name, min_timestamp=max_ts, max_timestamp=new_max, row_count=df_new_songs.count(), status="SUCCESS")
+    except Exception as e:
         insert_log(
             spark=spark, 
             bucket_name=bucket_name, 
@@ -92,20 +94,20 @@ def load_dim_song(spark: SparkSession):
         )
         raise e
 
+
 def load_dim_user(spark: SparkSession):
     job_name = "dim_user"
     max_ts = get_max_timestamp(spark, "gold", job_name)
     logger.info(f"Bơm dữ liệu dim_user (SCD2) từ {max_ts}...")
+    df_events = spark.table("lakehouse.silver.listen_events").where(f"_processed_at > '{max_ts}'")
     
-    df_status = spark.table("lakehouse.silver.status_change_events").where(f"_processed_at > '{max_ts}'")
-    
-    if df_status.isEmpty():
+    if df_events.isEmpty():
         logger.info("Không có thay đổi user nào mới.")
         return
         
-    # 1. Lấy trạng thái MỚI NHẤT của user (Bao gồm cả level và zip đã mask)
+    # 1. Lấy trạng thái MỚI NHẤT của user
     w_status = Window.partitionBy("user_pseudo_id").orderBy(F.col("ts").desc())
-    df_updates = df_status.withColumn("rn", F.row_number().over(w_status)) \
+    df_updates = df_events.filter(F.col("user_pseudo_id").isNotNull()).withColumn("rn", F.row_number().over(w_status)) \
                           .where("rn = 1") \
                           .select("user_pseudo_id", "level", "zip","gender")
     
@@ -117,20 +119,23 @@ def load_dim_user(spark: SparkSession):
         MERGE INTO lakehouse.gold.dim_user t
         USING vw_user_updates s
         ON t.user_pseudo_id = s.user_pseudo_id AND t.is_current = true
-        WHEN MATCHED THEN
+        WHEN MATCHED AND (t.level != s.level OR t.zip != s.zip OR t.gender != s.gender) THEN
             UPDATE SET is_current = false, end_date = s.start_date
     """)
     
-    # 3. Chèn bản ghi mới (is_current = true)
+    # 3. Chèn bản ghi mới (is_current = true) (Chỉ chèn nếu record đó thực sự là mới hoặc có update)
+    # Ta thực hiện left anti join với dữ liệu hiện tại để tránh duplicate insert cho các user không có gì thay đổi
     spark.sql("""
         INSERT INTO lakehouse.gold.dim_user
-        SELECT user_pseudo_id, level, zip, start_date, CAST(NULL AS TIMESTAMP) as end_date, true as is_current
-        FROM vw_user_updates
+        SELECT s.user_pseudo_id, s.level, s.zip, s.gender, s.start_date, CAST(NULL AS TIMESTAMP) as end_date, true as is_current
+        FROM vw_user_updates s
+        LEFT ANTI JOIN lakehouse.gold.dim_user t
+        ON s.user_pseudo_id = t.user_pseudo_id AND t.is_current = true AND s.level = t.level AND s.zip = t.zip AND s.gender = t.gender
     """)
     
     # Cập nhật Watermark Log
-    new_max = df_status.agg(F.max("_processed_at")).collect()[0][0]
-    insert_log(spark, "gold", job_name, min_ts=max_ts, max_ts=new_max, row_count=df_updates.count(), status="SUCCESS")
+    new_max = df_events.agg(F.max("_processed_at")).collect()[0][0]
+    insert_log(spark, "gold", job_name, min_timestamp=max_ts, max_timestamp=new_max, row_count=df_updates.count(), status="SUCCESS")
 
 if __name__ == "__main__":
     create_dim_tables(spark)

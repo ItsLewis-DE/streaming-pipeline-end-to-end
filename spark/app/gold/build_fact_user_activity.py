@@ -67,24 +67,26 @@ def create_fact_tables(spark: SparkSession):
 # FACT 1: USER ACTIVITY (Gộp 2 bảng Silver)
 # ========================================================================
 def load_fact_user_activity(spark: SparkSession):
-    job_name = "fact_user_activity_5min"
-    max_ts = get_max_timestamp(spark, "gold", job_name)
-    logger.info(f"[{job_name}] Đọc dữ liệu mới từ {max_ts}...")
+    job_name_listen = "fact_user_activity_5min_listen"
+    job_name_page = "fact_user_activity_5min_page"
+    max_ts_listen = get_max_timestamp(spark, "gold", job_name_listen)
+    max_ts_page = get_max_timestamp(spark, "gold", job_name_page)
+    logger.info(f"Đọc listen > {max_ts_listen}, page > {max_ts_page}")
 
     try:
-        # --- Đọc incremental từ 2 bảng Silver ---
-        df_listen = spark.table("lakehouse.silver.listen_events").where(f"_processed_at > '{max_ts}'")
-        df_page = spark.table("lakehouse.silver.page_view_events").where(f"_processed_at > '{max_ts}'")
+        # --- Đọc incremental từ 2 bảng Silver với 2 watermark riêng biệt ---
+        df_listen = spark.table("lakehouse.silver.listen_events").where(f"_processed_at > '{max_ts_listen}'")
+        df_page = spark.table("lakehouse.silver.page_view_events").where(f"_processed_at > '{max_ts_page}'")
 
         # Nếu không có dữ liệu mới ở cả 2 bảng thì dừng
         if df_listen.isEmpty() and df_page.isEmpty():
-            logger.info(f"[{job_name}] Không có dữ liệu mới.")
+            logger.info(f"Không có dữ liệu mới cho fact_user_activity.")
             return
 
         # --- Gom nhóm riêng từng bảng theo cửa sổ 5 phút ---
         # Bảng Listen: đếm bài hát + tổng thời lượng nghe
         df_listen_agg = df_listen.groupBy(
-            F.window(F.col("ts"), "5 minutes"),
+            F.window(F.col("ingested_at"), "5 minutes"),
             F.col("user_pseudo_id")
         ).agg(
             F.countDistinct("song").alias("songs_played"),
@@ -93,7 +95,7 @@ def load_fact_user_activity(spark: SparkSession):
 
         # Bảng Page View: đếm số lần lướt trang
         df_page_agg = df_page.groupBy(
-            F.window(F.col("ts"), "5 minutes"),
+            F.window(F.col("ingested_at"), "5 minutes"),
             F.col("user_pseudo_id")
         ).agg(
             F.count("*").alias("page_views")
@@ -114,26 +116,40 @@ def load_fact_user_activity(spark: SparkSession):
             F.coalesce(F.col("page_views"), F.lit(0)).alias("page_views")
         )
 
-        # --- Append vào bảng Iceberg ---
+        # --- Dùng MERGE INTO thay vì Append để cộng dồn/upsert vào bảng Iceberg ---
         target_table = "lakehouse.gold.fact_user_activity_5min"
         row_count = df_result.count()
         if row_count > 0:
-            df_result.writeTo(target_table).append()
+            df_result.createOrReplaceTempView("vw_fact_user_activity")
+            spark.sql(f"""
+                MERGE INTO {target_table} t
+                USING vw_fact_user_activity s
+                ON t.window_start = s.window_start 
+                   AND t.user_pseudo_id = s.user_pseudo_id
+                WHEN MATCHED THEN
+                    UPDATE SET 
+                        songs_played = t.songs_played + s.songs_played,
+                        listen_duration = t.listen_duration + s.listen_duration,
+                        page_views = t.page_views + s.page_views
+                WHEN NOT MATCHED THEN
+                    INSERT (window_start, window_end, user_pseudo_id, songs_played, listen_duration, page_views)
+                    VALUES (s.window_start, s.window_end, s.user_pseudo_id, s.songs_played, s.listen_duration, s.page_views)
+            """)
             
-            # Lấy max _processed_at từ cả 2 bảng để cập nhật watermark
-            max_timestamps = []
+            # Ghi log watermark TÁCH BIỆT
             if not df_listen.isEmpty():
-                max_timestamps.append(df_listen.agg(F.max("_processed_at")).collect()[0][0])
+                new_max_listen = str(df_listen.agg(F.max("_processed_at")).collect()[0][0])
+                insert_log(spark, "gold", job_name_listen, min_timestamp=max_ts_listen, max_timestamp=new_max_listen, row_count=row_count, status="SUCCESS")
+            
             if not df_page.isEmpty():
-                max_timestamps.append(df_page.agg(F.max("_processed_at")).collect()[0][0])
-            new_max = str(max(max_timestamps))
-
-            insert_log(spark, "gold", job_name, min_timestamp=max_ts, max_timestamp=new_max, row_count=row_count, status="SUCCESS")
-            logger.info(f"[{job_name}] Đã ghi {row_count} dòng thành công!")
+                new_max_page = str(df_page.agg(F.max("_processed_at")).collect()[0][0])
+                insert_log(spark, "gold", job_name_page, min_timestamp=max_ts_page, max_timestamp=new_max_page, row_count=row_count, status="SUCCESS")
+                
+            logger.info(f"Đã MERGE {row_count} dòng thành công vào fact_user_activity!")
 
     except Exception as e:
-        logger.error(f"[{job_name}] Lỗi: {e}")
-        insert_log(spark, "gold", job_name, min_timestamp=max_ts, max_timestamp=max_ts, row_count=0, status="FAILED", error_message=str(e))
+        logger.error(f"Lỗi: {e}")
+        insert_log(spark, "gold", "fact_user_activity_5min_error", min_timestamp="0", max_timestamp="0", row_count=0, status="FAILED", error_message=str(e))
         raise e
 
 # ========================================================================
@@ -153,7 +169,7 @@ def load_fact_platform_health(spark: SparkSession):
             return
 
         df_result = df_page.groupBy(
-            F.window(F.col("ts"), "5 minutes")
+            F.window(F.col("ingested_at"), "5 minutes")
         ).agg(
             F.countDistinct("user_pseudo_id").alias("active_users"),
             F.countDistinct(F.when(F.col("level") == "paid", F.col("user_pseudo_id"))).alias("paid_users"),
@@ -171,11 +187,26 @@ def load_fact_platform_health(spark: SparkSession):
         target_table = "lakehouse.gold.fact_platform_health_5min"
         row_count = df_result.count()
         if row_count > 0:
-            df_result.writeTo(target_table).append()
+            df_result.createOrReplaceTempView("vw_fact_platform_health")
+            spark.sql(f"""
+                MERGE INTO {target_table} t
+                USING vw_fact_platform_health s
+                ON t.window_start = s.window_start
+                WHEN MATCHED THEN
+                    UPDATE SET
+                        active_users = t.active_users + s.active_users,
+                        paid_users = t.paid_users + s.paid_users,
+                        free_users = t.free_users + s.free_users,
+                        total_listens = t.total_listens + s.total_listens,
+                        total_page_views = t.total_page_views + s.total_page_views,
+                        total_errors = t.total_errors + s.total_errors
+                WHEN NOT MATCHED THEN
+                    INSERT *
+            """)
 
             new_max = str(df_page.agg(F.max("_processed_at")).collect()[0][0])
             insert_log(spark, "gold", job_name, min_timestamp=max_ts, max_timestamp=new_max, row_count=row_count, status="SUCCESS")
-            logger.info(f"[{job_name}] Đã ghi {row_count} dòng thành công!")
+            logger.info(f"[{job_name}] Đã MERGE {row_count} dòng thành công!")
 
     except Exception as e:
         logger.error(f"[{job_name}] Lỗi: {e}")
@@ -203,7 +234,7 @@ def load_fact_top_content(spark: SparkSession):
         ).withColumn(
             "song_id", F.md5(F.concat_ws("||", F.col("artist"), F.col("song")))
         ).groupBy(
-            F.window(F.col("ts"), "5 minutes"),
+            F.window(F.col("ingested_at"), "5 minutes"),
             "song_id"
         ).agg(
             F.count("*").alias("play_count")
@@ -217,11 +248,20 @@ def load_fact_top_content(spark: SparkSession):
         target_table = "lakehouse.gold.fact_top_content_5min"
         row_count = df_result.count()
         if row_count > 0:
-            df_result.writeTo(target_table).append()
+            df_result.createOrReplaceTempView("vw_fact_top_content")
+            spark.sql(f"""
+                MERGE INTO {target_table} t
+                USING vw_fact_top_content s
+                ON t.window_start = s.window_start AND t.song_id = s.song_id
+                WHEN MATCHED THEN
+                    UPDATE SET play_count = t.play_count + s.play_count
+                WHEN NOT MATCHED THEN
+                    INSERT *
+            """)
 
             new_max = str(df_listen.agg(F.max("_processed_at")).collect()[0][0])
             insert_log(spark, "gold", job_name, min_timestamp=max_ts, max_timestamp=new_max, row_count=row_count, status="SUCCESS")
-            logger.info(f"[{job_name}] Đã ghi {row_count} dòng thành công!")
+            logger.info(f"[{job_name}] Đã MERGE {row_count} dòng thành công!")
 
     except Exception as e:
         logger.error(f"[{job_name}] Lỗi: {e}")

@@ -9,11 +9,11 @@
     </property>
     <property>
         <name>javax.jdo.option.ConnectionUserName</name>
-        <value>pipeline_admin</value>
+        <value>hive</value>
     </property>
     <property>
         <name>javax.jdo.option.ConnectionPassword</name>
-        <value>123</value>
+        <value>hive</value>
     </property>
     <property>
         <name>hive.metastore.warehouse.dir</name>

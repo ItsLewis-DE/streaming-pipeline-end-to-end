@@ -1,22 +1,27 @@
 # =============================================================================
-# Airflow Python Dependencies
-# Pin all versions for reproducibility
+# Airflow 3.2.2 Python Dependencies
+# Use constraint file for reproducibility:
+#   https://raw.githubusercontent.com/apache/airflow/constraints-3.2.2/constraints-3.12.txt
 # =============================================================================
 
-# Airflow Providers
-apache-airflow-providers-apache-kafka==1.6.1
-apache-airflow-providers-apache-spark==4.11.1
-apache-airflow-providers-postgres==5.13.0
-apache-airflow-providers-redis==3.8.0
-apache-airflow-providers-http==4.13.2
+# Airflow Providers (compatible with Airflow 3.x)
+apache-airflow-providers-apache-kafka
+apache-airflow-providers-apache-spark
+apache-airflow-providers-postgres
+apache-airflow-providers-redis
+apache-airflow-providers-http
+apache-airflow-providers-ssh
+apache-airflow-providers-celery
+apache-airflow-providers-common-compat
+apache-airflow-providers-fab
 
 # Celery (for CeleryExecutor)
-celery[redis]==5.4.0
-flower==2.0.1
+celery[redis]
+flower
 
 # Data processing
-psycopg2-binary==2.9.10
-confluent-kafka==2.6.1
+psycopg2-binary
+confluent-kafka
 
 # Utilities
-requests==2.32.3
+requests
